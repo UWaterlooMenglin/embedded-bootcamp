@@ -73,9 +73,7 @@ void SystemClock_Config(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-  period = htim1.Init.Period + 1;
-  offset = period * 0.05;
-  range = period * (0.1 - 0.05);
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -99,6 +97,10 @@ int main(void)
   MX_SPI1_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+
+  period = htim1.Init.Period + 1;
+  offset = period * 0.05;
+  range = period * (0.1 - 0.05);
 
   // Start PWM generation on TIM1 Channel 1
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
