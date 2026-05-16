@@ -19,6 +19,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "spi.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -44,7 +46,13 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+uint8_t adc_tx_data[3] = {0b00000001, 0b10000000, 0b00000000}; // Data to send to ADC
+uint8_t adc_rx_data[3] = {}; // Data received from ADC
+uint32_t adc_value = 0;       // Raw ADC value (10 bits)
+uint32_t pwm_counts = 0;      // PWM compare value in timer counts
+uint32_t period = 0;
+uint32_t offset = 0;
+uint32_t range = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,7 +73,9 @@ void SystemClock_Config(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+  period = htim1.Init.Period + 1;
+  offset = period * 0.05;
+  range = period * (0.1 - 0.05);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -74,7 +84,6 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -87,7 +96,12 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_SPI1_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+
+  // Start PWM generation on TIM1 Channel 1
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
 
   /* USER CODE END 2 */
 
@@ -98,6 +112,31 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+    // Pull CS low to select ADC
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+
+    // Send command to ADC and receive data (full duplex SPI)
+    // adc_tx_data contains the channel and mode bits (consult ADC datasheet section 5)
+    HAL_SPI_TransmitReceive(&hspi1, adc_tx_data, adc_rx_data, 3, 100);
+
+    // Pull CS high to deselect ADC
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+
+    // Extract 10-bit ADC value from received data
+    adc_value = (adc_rx_data[1] << 8) | adc_rx_data[2];
+
+    // Convert ADC value to PWM counts
+    pwm_counts = offset + (adc_value * range / 1024);
+
+    // Clamp to max period to avoid overflow
+    if (pwm_counts > period) pwm_counts = period;
+
+    // Update PWM duty cycle
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm_counts);
+
+    // Delay to avoid overloading the ADC
+    HAL_Delay(10);
   }
   /* USER CODE END 3 */
 }
